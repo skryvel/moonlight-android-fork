@@ -154,6 +154,13 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x1532, 0x100c ), k_eControllerType_PS5Controller, NULL },	// Razer Wolverine V2 Pro (Wireless)
 	{ MAKE_CONTROLLER_ID( 0x358a, 0x0104 ), k_eControllerType_PS5Controller, NULL },	// Backbone One PlayStation Edition for iOS
 
+	{ MAKE_CONTROLLER_ID( 0x2833, 0x0183 ), k_eControllerType_XBoxOneController, "Meta Quest Pro Touch Controller (Left)" },	// Meta Quest Pro Touch Controller (Left)
+	{ MAKE_CONTROLLER_ID( 0x2833, 0x0184 ), k_eControllerType_XBoxOneController, "Meta Quest Pro Touch Controller (Right)" },	// Meta Quest Pro Touch Controller (Right)
+	{ MAKE_CONTROLLER_ID( 0x2833, 0x0186 ), k_eControllerType_XBoxOneController, "Meta Quest Touch Controller (Left)" },	// Meta Quest/Quest 2 Touch Controller (Left)
+	{ MAKE_CONTROLLER_ID( 0x2833, 0x0187 ), k_eControllerType_XBoxOneController, "Meta Quest Touch Controller (Right)" },	// Meta Quest/Quest 2 Touch Controller (Right)
+	{ MAKE_CONTROLLER_ID( 0x2833, 0x0510 ), k_eControllerType_XBoxOneController, "Meta Quest 3 Touch Plus Controller (Left)" },	// Meta Quest 3 Touch Plus Controller (Left)
+	{ MAKE_CONTROLLER_ID( 0x2833, 0x0511 ), k_eControllerType_XBoxOneController, "Meta Quest 3 Touch Plus Controller (Right)" },	// Meta Quest 3 Touch Plus Controller (Right)
+
 	{ MAKE_CONTROLLER_ID( 0x0079, 0x0006 ), k_eControllerType_UnknownNonSteamController, NULL },	// DragonRise Generic USB PCB, sometimes configured as a PC Twin Shock Controller - looks like a DS3 but the face buttons are 1-4 instead of symbols
 
 	{ MAKE_CONTROLLER_ID( 0x0079, 0x18d4 ), k_eControllerType_XBox360Controller, NULL },	// GPD Win 2 X-Box Controller
