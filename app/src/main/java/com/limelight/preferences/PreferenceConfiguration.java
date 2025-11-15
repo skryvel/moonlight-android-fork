@@ -443,6 +443,18 @@ public class PreferenceConfiguration {
                 Build.FINGERPRINT.contains("PPR1.180610.011/4079208_2235.1395");
     }
 
+    public static boolean isMetaQuestDevice() {
+        // Detect Meta Quest devices (Quest 1/2/3/Pro)
+        // Uses standard Android Build properties, no Meta SDK required
+        return Build.MANUFACTURER.equalsIgnoreCase("Oculus") ||
+                Build.MANUFACTURER.equalsIgnoreCase("Meta");
+    }
+
+    public static boolean isNvidiaShieldDevice() {
+        // Detect NVIDIA Shield devices (Shield TV, Shield Portable, Shield Tablet)
+        return Build.MANUFACTURER.equalsIgnoreCase("NVIDIA");
+    }
+
     public static PreferenceConfiguration readPreferences(Context context) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
         PreferenceConfiguration config = new PreferenceConfiguration();
