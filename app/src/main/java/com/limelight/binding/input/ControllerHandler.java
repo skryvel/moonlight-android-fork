@@ -729,6 +729,30 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         context.hasPaddles = MoonBridge.guessControllerHasPaddles(context.vendorId, context.productId);
         context.hasShare = MoonBridge.guessControllerHasShareButton(context.vendorId, context.productId);
 
+        // Log controller type for debugging (especially useful for Quest controllers)
+        byte controllerType = MoonBridge.guessControllerType(context.vendorId, context.productId);
+        String controllerTypeStr;
+        switch (controllerType) {
+            case MoonBridge.LI_CTYPE_XBOX:
+                controllerTypeStr = "Xbox";
+                break;
+            case MoonBridge.LI_CTYPE_PS:
+                controllerTypeStr = "PlayStation";
+                break;
+            case MoonBridge.LI_CTYPE_NINTENDO:
+                controllerTypeStr = "Nintendo";
+                break;
+            default:
+                controllerTypeStr = "Unknown";
+                break;
+        }
+        LimeLog.info("Controller type: " + controllerTypeStr + " (0x" + Integer.toHexString(controllerType) + ")");
+
+        // Log if this is a Meta Quest controller being emulated as Xbox
+        if (context.vendorId == 0x2833) {
+            LimeLog.info("Meta Quest controller detected - emulating as Xbox controller");
+        }
+
         // Try to use the InputDevice's associated vibrators first
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && hasQuadAmplitudeControlledRumbleVibrators(dev.getVibratorManager())) {
             context.vibratorManager = dev.getVibratorManager();

@@ -219,6 +219,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         prefConfig = PreferenceConfiguration.readPreferences(this);
         tombstonePrefs = Game.this.getSharedPreferences("DecoderTombstone", 0);
 
+        // Log Quest device information and optimizations if applicable
+        com.limelight.binding.QuestOptimizations.logQuestInfo(this);
+
         // Enter landscape unless we're on a square screen
         setPreferredOrientationForCurrentDisplay();
 
