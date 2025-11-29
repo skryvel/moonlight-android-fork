@@ -5,6 +5,7 @@ import android.content.Context;
 import com.limelight.LimeLog;
 import com.limelight.nvstream.input.ControllerPacket;
 import com.limelight.nvstream.jni.MoonBridge;
+import com.limelight.preferences.PreferenceConfiguration;
 
 /**
  * Controller driver for Meta Quest 3 controllers using OpenXR.
@@ -18,6 +19,11 @@ public class QuestController extends AbstractController {
     private Thread inputThread;
     private boolean stopped;
     private Context context;
+    private boolean gamepadMode;  // true = gamepad mode, false = mouse mode
+
+    // Mouse mode state
+    private boolean mouseLeftButtonDown = false;
+    private boolean mouseRightButtonDown = false;
 
     // Native method declarations
     private static native boolean nativeInit(Context context);
@@ -93,6 +99,11 @@ public class QuestController extends AbstractController {
 
         stopped = false;
 
+        // Read preference for gamepad vs mouse mode
+        PreferenceConfiguration config = PreferenceConfiguration.readPreferences(context);
+        gamepadMode = config.questControllerGamepadMode;
+        LimeLog.info("Quest controller starting in " + (gamepadMode ? "gamepad" : "mouse") + " mode");
+
         // Create input polling thread
         inputThread = new Thread(() -> {
             LimeLog.info("Quest controller input thread started");
@@ -115,27 +126,13 @@ public class QuestController extends AbstractController {
                 try {
                     // Poll controller state from OpenXR
                     if (nativePoll(floatData, boolData)) {
-                        // Update button flags
-                        setButtonFlag(ControllerPacket.A_FLAG, boolData[0]);
-                        setButtonFlag(ControllerPacket.B_FLAG, boolData[1]);
-                        setButtonFlag(ControllerPacket.X_FLAG, boolData[2]);
-                        setButtonFlag(ControllerPacket.Y_FLAG, boolData[3]);
-                        setButtonFlag(ControllerPacket.PLAY_FLAG, boolData[4]); // Menu -> Play/Start
-                        setButtonFlag(ControllerPacket.LB_FLAG, boolData[5]);
-                        setButtonFlag(ControllerPacket.RB_FLAG, boolData[6]);
-                        setButtonFlag(ControllerPacket.LS_CLK_FLAG, boolData[7]);
-                        setButtonFlag(ControllerPacket.RS_CLK_FLAG, boolData[8]);
-
-                        // Update analog values
-                        leftTrigger = floatData[0];
-                        rightTrigger = floatData[1];
-                        leftStickX = floatData[2];
-                        leftStickY = floatData[3];
-                        rightStickX = floatData[4];
-                        rightStickY = floatData[5];
-
-                        // Report input to Moonlight
-                        reportInput();
+                        if (gamepadMode) {
+                            // Gamepad mode - map to Xbox controller
+                            handleGamepadMode(floatData, boolData);
+                        } else {
+                            // Mouse mode - use controllers as mouse input
+                            handleMouseMode(floatData, boolData);
+                        }
                     }
 
                     // Poll at ~60Hz
@@ -217,6 +214,106 @@ public class QuestController extends AbstractController {
             buttonFlags |= flag;
         } else {
             buttonFlags &= ~flag;
+        }
+    }
+
+    /**
+     * Handle input in gamepad mode - maps Quest controllers to Xbox-style gamepad
+     */
+    private void handleGamepadMode(float[] floatData, boolean[] boolData) {
+        // Update button flags
+        setButtonFlag(ControllerPacket.A_FLAG, boolData[0]);
+        setButtonFlag(ControllerPacket.B_FLAG, boolData[1]);
+        setButtonFlag(ControllerPacket.X_FLAG, boolData[2]);
+        setButtonFlag(ControllerPacket.Y_FLAG, boolData[3]);
+        setButtonFlag(ControllerPacket.PLAY_FLAG, boolData[4]); // Menu -> Play/Start
+        setButtonFlag(ControllerPacket.LB_FLAG, boolData[5]);
+        setButtonFlag(ControllerPacket.RB_FLAG, boolData[6]);
+        setButtonFlag(ControllerPacket.LS_CLK_FLAG, boolData[7]);
+        setButtonFlag(ControllerPacket.RS_CLK_FLAG, boolData[8]);
+
+        // Update analog values
+        leftTrigger = floatData[0];
+        rightTrigger = floatData[1];
+        leftStickX = floatData[2];
+        leftStickY = floatData[3];
+        rightStickX = floatData[4];
+        rightStickY = floatData[5];
+
+        // Report input to Moonlight as gamepad
+        reportInput();
+    }
+
+    /**
+     * Handle input in mouse mode - maps Quest controllers to mouse/keyboard input
+     *
+     * Mouse mode mapping:
+     * - Right thumbstick -> Mouse movement
+     * - Right trigger -> Left mouse button
+     * - Right grip (RB) -> Right mouse button
+     * - A button -> Middle mouse button
+     * - Left thumbstick Y-axis -> Mouse scroll wheel
+     */
+    private void handleMouseMode(float[] floatData, boolean[] boolData) {
+        // Extract controller state
+        // floatData: [leftTrigger, rightTrigger, leftStickX, leftStickY, rightStickX, rightStickY]
+        // boolData: [A, B, X, Y, Menu, LB, RB, LS_Click, RS_Click]
+
+        float rightStickX = floatData[4];
+        float rightStickY = floatData[5];
+        float leftStickY = floatData[3];
+        float rightTrigger = floatData[1];
+        boolean aButton = boolData[0];
+        boolean rightGrip = boolData[6]; // RB
+
+        // Mouse movement from right thumbstick
+        // Apply deadzone and scaling
+        final float DEADZONE = 0.15f;
+        final float MOUSE_SENSITIVITY = 15.0f; // Pixels per frame at full stick deflection
+
+        if (Math.abs(rightStickX) > DEADZONE || Math.abs(rightStickY) > DEADZONE) {
+            // Apply deadzone
+            float deltaX = Math.abs(rightStickX) > DEADZONE ? rightStickX : 0;
+            float deltaY = Math.abs(rightStickY) > DEADZONE ? rightStickY : 0;
+
+            // Scale movement
+            short mouseDeltaX = (short)(deltaX * MOUSE_SENSITIVITY);
+            short mouseDeltaY = (short)(-deltaY * MOUSE_SENSITIVITY); // Invert Y for natural movement
+
+            // Send mouse move
+            MoonBridge.sendMouseMove(mouseDeltaX, mouseDeltaY);
+        }
+
+        // Left mouse button (right trigger)
+        boolean leftButtonPressed = rightTrigger > 0.5f;
+        if (leftButtonPressed != mouseLeftButtonDown) {
+            mouseLeftButtonDown = leftButtonPressed;
+            MoonBridge.sendMouseButton(
+                leftButtonPressed ? (byte)0x07 : (byte)0x08,  // Press/Release
+                (byte)0x01  // Left button
+            );
+        }
+
+        // Right mouse button (right grip/RB)
+        if (rightGrip != mouseRightButtonDown) {
+            mouseRightButtonDown = rightGrip;
+            MoonBridge.sendMouseButton(
+                rightGrip ? (byte)0x07 : (byte)0x08,  // Press/Release
+                (byte)0x03  // Right button
+            );
+        }
+
+        // Middle mouse button (A button)
+        // Note: Using static to track state across calls
+        if (aButton) {
+            MoonBridge.sendMouseButton((byte)0x07, (byte)0x02); // Press middle
+            MoonBridge.sendMouseButton((byte)0x08, (byte)0x02); // Release middle (immediate)
+        }
+
+        // Mouse scroll wheel (left thumbstick Y-axis)
+        if (Math.abs(leftStickY) > DEADZONE) {
+            short scrollAmount = (short)(leftStickY * 120); // Standard scroll amount
+            MoonBridge.sendMouseHighResScroll(scrollAmount);
         }
     }
 }

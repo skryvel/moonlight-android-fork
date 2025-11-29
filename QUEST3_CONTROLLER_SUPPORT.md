@@ -4,7 +4,11 @@ This document describes the implementation of Meta Quest 3 controller support fo
 
 ## Overview
 
-Meta Quest 3 controllers are now supported as gamepad input devices. The controllers are mapped to an Xbox-style gamepad layout, allowing you to use them for game streaming.
+Meta Quest 3 controllers are now supported with two input modes:
+1. **Gamepad Mode** (default): Controllers are mapped to an Xbox-style gamepad layout for game streaming
+2. **Mouse Mode**: Controllers act as mouse/keyboard input for desktop applications and navigation
+
+The mode can be toggled in Settings under "Gamepad Settings" → "Quest controllers as gamepad".
 
 ## Implementation
 
@@ -28,7 +32,7 @@ The implementation consists of three main components:
    - Reports input to Moonlight's input system
    - Validates required buttons are present
 
-### Button Mapping
+### Gamepad Mode Button Mapping
 
 Quest 3 controllers are mapped to Xbox-style gamepad as follows:
 
@@ -48,6 +52,18 @@ Quest 3 controllers are mapped to Xbox-style gamepad as follows:
 | Right Stick Click      | RS (Right Stick Click)  |
 | Menu Button (left)     | Start/Menu              |
 
+### Mouse Mode Input Mapping
+
+In mouse mode, Quest controllers are mapped to mouse and keyboard controls:
+
+| Quest Controller Input | Mouse/Keyboard Action    |
+|------------------------|--------------------------|
+| Right Thumbstick       | Mouse Movement           |
+| Right Trigger          | Left Mouse Button        |
+| Right Grip (RB)        | Right Mouse Button       |
+| A Button               | Middle Mouse Button      |
+| Left Thumbstick Y-axis | Mouse Scroll Wheel       |
+
 ### Validation
 
 The implementation includes validation to ensure the Quest controllers have all required inputs:
@@ -60,6 +76,14 @@ If validation fails, a `RuntimeException` is thrown with a descriptive error mes
 
 ## Usage
 
+### Switching Between Modes
+
+1. Open Moonlight settings
+2. Navigate to **Gamepad Settings**
+3. Find **"Quest controllers as gamepad"** checkbox
+4. **Checked** (default): Gamepad mode - use for gaming
+5. **Unchecked**: Mouse mode - use for desktop applications and navigation
+
 ### Initialization
 
 ```java
@@ -71,6 +95,7 @@ UsbDriverListener listener = ...; // Your listener implementation
 try {
     QuestController controller = QuestController.create(context, deviceId, listener);
     controller.start();
+    // Mode is automatically selected based on user preference
 } catch (RuntimeException e) {
     // Handle initialization failure
     Log.e(TAG, "Failed to initialize Quest controller: " + e.getMessage());
@@ -124,6 +149,10 @@ The implementation suggests bindings for the Oculus Touch controller profile:
   - Future implementation will use `XR_FB_haptic_amplitude_envelope` extension
 - **Trigger Rumble**: Quest controllers don't have trigger motors
 - **D-Pad**: Quest controllers don't have a physical D-pad (would require mapping thumbstick to D-pad)
+- **Mouse Mode**:
+  - Sensitivity is fixed (15 pixels/frame at full deflection)
+  - No keyboard input mapping yet
+  - Middle mouse button (A button) fires immediately without hold support
 
 ## Future Enhancements
 
@@ -131,6 +160,11 @@ The implementation suggests bindings for the Oculus Touch controller profile:
 2. **Hand Tracking**: Optional hand tracking support via `XR_META_simultaneous_hands_and_controllers`
 3. **Controller Battery**: Report battery state via `XR_EXT_hand_tracking`
 4. **Advanced Features**: Support for Quest Pro features (face/eye tracking, controller haptics)
+5. **Mouse Mode Improvements**:
+   - Configurable mouse sensitivity
+   - Keyboard input mapping (e.g., virtual keyboard trigger)
+   - D-pad emulation using left thumbstick
+   - Customizable button mappings
 
 ## Testing
 
