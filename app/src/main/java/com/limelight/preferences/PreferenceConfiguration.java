@@ -608,4 +608,15 @@ public class PreferenceConfiguration {
 
         return config;
     }
+
+    /**
+     * Save Quest controller gamepad mode preference.
+     * Used for runtime toggling between gamepad and mouse modes.
+     */
+    public static void setQuestControllerGamepadMode(Context context, boolean gamepadMode) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        prefs.edit()
+            .putBoolean(QUEST_CONTROLLER_GAMEPAD_MODE_PREF_STRING, gamepadMode)
+            .apply();
+    }
 }

@@ -31,6 +31,7 @@ The implementation consists of three main components:
    - Manages controller lifecycle
    - Reports input to Moonlight's input system
    - Validates required buttons are present
+   - Implements runtime mode toggle via menu button double-tap
 
 ### Gamepad Mode Button Mapping
 
@@ -64,6 +65,26 @@ In mouse mode, Quest controllers are mapped to mouse and keyboard controls:
 | A Button               | Middle Mouse Button      |
 | Left Thumbstick Y-axis | Mouse Scroll Wheel       |
 
+### Runtime Mode Toggle
+
+The controller driver implements a double-tap detection system for quick mode switching:
+
+- **Trigger**: Double-tap the Menu button (left controller) within 500ms
+- **Action**: Toggles between gamepad and mouse mode
+- **Feedback**: Toast notification displays current mode
+- **Persistence**: Setting is immediately saved to SharedPreferences
+- **Detection**: Rising edge detection prevents accidental triggers
+
+Technical implementation:
+```java
+// Double-tap detection in QuestController.java
+private static final long DOUBLE_TAP_WINDOW_MS = 500;
+
+// Detects menu button double-tap and toggles mode
+// Shows toast notification and persists preference
+detectAndHandleModeToggleDoubleTap(menuButtonPressed);
+```
+
 ### Validation
 
 The implementation includes validation to ensure the Quest controllers have all required inputs:
@@ -77,6 +98,17 @@ If validation fails, a `RuntimeException` is thrown with a descriptive error mes
 ## Usage
 
 ### Switching Between Modes
+
+There are two ways to switch between gamepad and mouse modes:
+
+#### Method 1: Runtime Toggle (Quick)
+
+**Double-tap the left controller's Menu button** to instantly toggle between modes:
+- A toast notification will appear showing the current mode ("Gamepad Mode" or "Mouse Mode")
+- The setting is saved immediately and persists across sessions
+- This is the quickest way to switch modes during gameplay
+
+#### Method 2: Settings Menu
 
 1. Open Moonlight settings
 2. Navigate to **Gamepad Settings**

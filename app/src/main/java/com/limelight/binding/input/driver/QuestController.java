@@ -28,6 +28,11 @@ public class QuestController extends AbstractController {
     private boolean mouseLeftButtonDown = false;
     private boolean mouseRightButtonDown = false;
 
+    // Menu button double-tap detection for mode toggle
+    private boolean lastMenuButtonState = false;
+    private long lastMenuButtonPressTime = 0;
+    private static final long DOUBLE_TAP_WINDOW_MS = 500; // 500ms window for double-tap
+
     // Native method declarations
     private static native boolean nativeInit(Context context);
     private static native boolean nativePoll(float[] floatData, boolean[] boolData);
@@ -144,12 +149,20 @@ public class QuestController extends AbstractController {
                 try {
                     // Poll controller state from OpenXR
                     if (nativePoll(floatData, boolData)) {
-                        if (gamepadMode) {
-                            // Gamepad mode - map to Xbox controller
-                            handleGamepadMode(floatData, boolData);
-                        } else {
-                            // Mouse mode - use controllers as mouse input
-                            handleMouseMode(floatData, boolData);
+                        // Check for menu button double-tap to toggle mode
+                        // boolData[4] is the menu button
+                        boolean menuButtonPressed = boolData[4];
+                        boolean modeToggled = detectAndHandleModeToggleDoubleTap(menuButtonPressed);
+
+                        // Process input based on current mode (unless we just toggled)
+                        if (!modeToggled) {
+                            if (gamepadMode) {
+                                // Gamepad mode - map to Xbox controller
+                                handleGamepadMode(floatData, boolData);
+                            } else {
+                                // Mouse mode - use controllers as mouse input
+                                handleMouseMode(floatData, boolData);
+                            }
                         }
                     }
 
@@ -233,6 +246,53 @@ public class QuestController extends AbstractController {
         } else {
             buttonFlags &= ~flag;
         }
+    }
+
+    /**
+     * Detect double-tap on menu button and toggle between gamepad and mouse mode.
+     * @param menuButtonPressed Current state of menu button
+     * @return true if mode was toggled
+     */
+    private boolean detectAndHandleModeToggleDoubleTap(boolean menuButtonPressed) {
+        // Detect rising edge (button just pressed)
+        if (menuButtonPressed && !lastMenuButtonState) {
+            long currentTime = System.currentTimeMillis();
+            long timeSinceLastPress = currentTime - lastMenuButtonPressTime;
+
+            // Check if this is a double-tap
+            if (timeSinceLastPress < DOUBLE_TAP_WINDOW_MS && lastMenuButtonPressTime > 0) {
+                // Double-tap detected! Toggle mode
+                gamepadMode = !gamepadMode;
+
+                // Save preference
+                PreferenceConfiguration.setQuestControllerGamepadMode(context, gamepadMode);
+
+                // Log the change
+                LimeLog.info("Quest controller mode toggled to: " + (gamepadMode ? "GAMEPAD" : "MOUSE"));
+
+                // Show toast notification on UI thread
+                final String mode = gamepadMode ? "Gamepad" : "Mouse";
+                android.os.Handler mainHandler = new android.os.Handler(context.getMainLooper());
+                mainHandler.post(() -> {
+                    android.widget.Toast.makeText(
+                        context,
+                        "Quest Controller: " + mode + " Mode",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show();
+                });
+
+                // Reset the press time to prevent triple-tap triggering another toggle
+                lastMenuButtonPressTime = 0;
+                lastMenuButtonState = menuButtonPressed;
+                return true;
+            }
+
+            // Record this press time
+            lastMenuButtonPressTime = currentTime;
+        }
+
+        lastMenuButtonState = menuButtonPressed;
+        return false;
     }
 
     /**
