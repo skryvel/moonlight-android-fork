@@ -117,16 +117,11 @@ QuestController.cleanup();
 
 ## Build Variants
 
-The project now has build flavors to support both standard Android devices and Meta Quest devices:
-
-### Flavor Dimensions
-
-1. **Root dimension**: `root` or `nonRoot`
-2. **VR dimension**: `quest` or `standard`
+The project has build flavors to support both standard Android devices and Meta Quest devices:
 
 ### Available Build Variants
 
-- **nonRootStandardDebug/Release**: Standard Android build without OpenXR
+- **nonRootDebug/Release**: Standard Android build without OpenXR
   - No Quest controller support
   - Smaller APK size
   - No OpenXR dependency
@@ -136,7 +131,7 @@ The project now has build flavors to support both standard Android devices and M
   - OpenXR library included
   - Slightly larger APK size
 
-- **rootStandardDebug/Release**: Root build without OpenXR (API ≤ 25)
+- **rootDebug/Release**: Root build without OpenXR (API ≤ 25)
 - **rootQuestDebug/Release**: Root build with OpenXR (API ≤ 25)
 
 ### Building for Quest
@@ -157,10 +152,10 @@ For standard Android builds that don't need Quest support:
 
 ```bash
 # Debug build without Quest support
-./gradlew assembleNonRootStandardDebug
+./gradlew assembleNonRootDebug
 
 # Release build without Quest support
-./gradlew assembleNonRootStandardRelease
+./gradlew assembleNonRootRelease
 ```
 
 ## OpenXR Actions
@@ -229,8 +224,8 @@ To test the Quest 3 controller support:
 ## Troubleshooting
 
 ### "Quest controller support not available in this build"
-- You're using a `standard` build variant
-- Solution: Use a `quest` build variant (e.g., `nonRootQuestDebug`)
+- You're using a build without OpenXR (e.g., `nonRootDebug`)
+- Solution: Use a Quest build variant (e.g., `nonRootQuestDebug`)
 - Or build with: `./gradlew assembleNonRootQuestDebug`
 
 ### Controller Not Detected

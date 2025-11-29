@@ -18,8 +18,7 @@ android {
         ndk.debugSymbolLevel = 'FULL'
     }
 
-    flavorDimensions.add("root")
-    flavorDimensions.add("vr")
+    flavorDimensions.add("variant")
 
     buildFeatures {
         buildConfig = true
@@ -38,8 +37,24 @@ android {
             }
 
             applicationId "com.limelight.root"
-            dimension "root"
+            dimension "variant"
             buildConfigField "boolean", "ROOT_BUILD", "true"
+            buildConfigField "boolean", "HAS_OPENXR", "false"
+        }
+
+        rootQuest {
+            maxSdk 25
+
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "PRODUCT_FLAVOR=root"
+                }
+            }
+
+            applicationId "com.limelight.root"
+            dimension "variant"
+            buildConfigField "boolean", "ROOT_BUILD", "true"
+            buildConfigField "boolean", "HAS_OPENXR", "true"
         }
 
         nonRoot {
@@ -50,18 +65,22 @@ android {
             }
 
             applicationId "com.limelight"
-            dimension "root"
+            dimension "variant"
             buildConfigField "boolean", "ROOT_BUILD", "false"
-        }
-
-        quest {
-            dimension "vr"
-            buildConfigField "boolean", "HAS_OPENXR", "true"
-        }
-
-        standard {
-            dimension "vr"
             buildConfigField "boolean", "HAS_OPENXR", "false"
+        }
+
+        nonRootQuest {
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "PRODUCT_FLAVOR=nonRoot"
+                }
+            }
+
+            applicationId "com.limelight"
+            dimension "variant"
+            buildConfigField "boolean", "ROOT_BUILD", "false"
+            buildConfigField "boolean", "HAS_OPENXR", "true"
         }
     }
 
@@ -155,5 +174,6 @@ dependencies {
     implementation 'com.github.cgutman:ShieldControllerExtensions:1.0.1'
 
     // OpenXR only for Quest builds
-    questImplementation 'org.khronos.openxr:openxr_loader_for_android:1.0.34'
+    nonRootQuestImplementation 'org.khronos.openxr:openxr_loader_for_android:1.0.34'
+    rootQuestImplementation 'org.khronos.openxr:openxr_loader_for_android:1.0.34'
 }
