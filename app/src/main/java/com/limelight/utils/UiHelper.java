@@ -2,8 +2,6 @@ package com.limelight.utils;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.GameManager;
-import android.app.GameState;
 import android.app.LocaleManager;
 import android.app.UiModeManager;
 import android.content.Context;
@@ -17,6 +15,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 
+import com.limelight.BuildConfig;
 import com.limelight.Game;
 import com.limelight.R;
 import com.limelight.nvstream.http.ComputerDetails;
@@ -30,14 +29,46 @@ public class UiHelper {
     private static final int TV_HORIZONTAL_PADDING_DP = 15;
 
     private static void setGameModeStatus(Context context, boolean streaming, boolean interruptible) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            GameManager gameManager = context.getSystemService(GameManager.class);
+        // GameManager is not available on Quest/VR platforms
+        if (BuildConfig.HAS_OPENXR) {
+            // Skip GameManager on Quest builds
+            return;
+        }
 
-            if (streaming) {
-                gameManager.setGameState(new GameState(false, interruptible ? GameState.MODE_GAMEPLAY_INTERRUPTIBLE : GameState.MODE_GAMEPLAY_UNINTERRUPTIBLE));
-            }
-            else {
-                gameManager.setGameState(new GameState(false, GameState.MODE_NONE));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try {
+                // Use reflection to avoid compile-time dependency on GameManager
+                // This prevents issues on Quest builds where GameManager may not be available
+                Class<?> gameManagerClass = Class.forName("android.app.GameManager");
+                Class<?> gameStateClass = Class.forName("android.app.GameState");
+
+                Object gameManager = context.getSystemService(gameManagerClass);
+
+                if (gameManager != null) {
+                    // GameState constants
+                    int MODE_NONE = gameStateClass.getField("MODE_NONE").getInt(null);
+                    int MODE_GAMEPLAY_INTERRUPTIBLE = gameStateClass.getField("MODE_GAMEPLAY_INTERRUPTIBLE").getInt(null);
+                    int MODE_GAMEPLAY_UNINTERRUPTIBLE = gameStateClass.getField("MODE_GAMEPLAY_UNINTERRUPTIBLE").getInt(null);
+
+                    // Create GameState object
+                    int mode;
+                    if (streaming) {
+                        mode = interruptible ? MODE_GAMEPLAY_INTERRUPTIBLE : MODE_GAMEPLAY_UNINTERRUPTIBLE;
+                    } else {
+                        mode = MODE_NONE;
+                    }
+
+                    // GameState constructor: GameState(boolean isLoading, int mode)
+                    Object gameState = gameStateClass.getConstructor(boolean.class, int.class)
+                        .newInstance(false, mode);
+
+                    // Call gameManager.setGameState(gameState)
+                    gameManagerClass.getMethod("setGameState", gameStateClass)
+                        .invoke(gameManager, gameState);
+                }
+            } catch (Exception e) {
+                // GameManager not available on this device/platform, silently ignore
+                // This is expected on Quest/VR devices
             }
         }
     }
