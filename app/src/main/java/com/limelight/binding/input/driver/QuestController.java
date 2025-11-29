@@ -2,6 +2,7 @@ package com.limelight.binding.input.driver;
 
 import android.content.Context;
 
+import com.limelight.BuildConfig;
 import com.limelight.LimeLog;
 import com.limelight.nvstream.input.ControllerPacket;
 import com.limelight.nvstream.jni.MoonBridge;
@@ -9,7 +10,9 @@ import com.limelight.preferences.PreferenceConfiguration;
 
 /**
  * Controller driver for Meta Quest 3 controllers using OpenXR.
- * Maps Quest Touch controllers to Xbox-style gamepad layout.
+ * Maps Quest Touch controllers to Xbox-style gamepad layout or mouse/keyboard input.
+ *
+ * Only available when compiled with HAS_OPENXR build flag (Quest flavor).
  */
 public class QuestController extends AbstractController {
     private static final String TAG = "QuestController";
@@ -32,16 +35,31 @@ public class QuestController extends AbstractController {
     private static native boolean nativeValidate();
 
     static {
-        System.loadLibrary("moonlight-core");
+        // Only load OpenXR library if built with Quest flavor
+        if (BuildConfig.HAS_OPENXR) {
+            try {
+                System.loadLibrary("moonlight-openxr");
+            } catch (UnsatisfiedLinkError e) {
+                LimeLog.severe("Failed to load OpenXR library: " + e.getMessage());
+            }
+        }
     }
 
     /**
      * Initialize OpenXR and check if Quest controllers are available.
      * @param context Android application context
      * @return true if controllers were successfully initialized
-     * @throws RuntimeException if required gamepad buttons are not found
+     * @throws RuntimeException if required gamepad buttons are not found or if OpenXR is not available
      */
     public static synchronized QuestController create(Context context, int deviceId, UsbDriverListener listener) {
+        // Check if OpenXR support is available at compile time
+        if (!BuildConfig.HAS_OPENXR) {
+            throw new RuntimeException(
+                "Quest controller support not available in this build. " +
+                "Please use a Quest-enabled build variant (e.g., nonRootQuestDebug)."
+            );
+        }
+
         if (instance != null) {
             LimeLog.info("Quest controller already exists");
             return instance;

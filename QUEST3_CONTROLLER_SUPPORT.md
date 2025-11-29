@@ -111,9 +111,57 @@ QuestController.cleanup();
 
 ## Dependencies
 
-- **OpenXR Loader**: `org.khronos.openxr:openxr_loader_for_android:1.0.34`
+- **OpenXR Loader**: `org.khronos.openxr:openxr_loader_for_android:1.0.34` (Quest builds only)
 - Android NDK r27
 - Minimum SDK: 21
+
+## Build Variants
+
+The project now has build flavors to support both standard Android devices and Meta Quest devices:
+
+### Flavor Dimensions
+
+1. **Root dimension**: `root` or `nonRoot`
+2. **VR dimension**: `quest` or `standard`
+
+### Available Build Variants
+
+- **nonRootStandardDebug/Release**: Standard Android build without OpenXR
+  - No Quest controller support
+  - Smaller APK size
+  - No OpenXR dependency
+
+- **nonRootQuestDebug/Release**: Quest-enabled Android build with OpenXR
+  - Full Quest controller support
+  - OpenXR library included
+  - Slightly larger APK size
+
+- **rootStandardDebug/Release**: Root build without OpenXR (API ≤ 25)
+- **rootQuestDebug/Release**: Root build with OpenXR (API ≤ 25)
+
+### Building for Quest
+
+To build with Quest controller support:
+
+```bash
+# Debug build with Quest support
+./gradlew assembleNonRootQuestDebug
+
+# Release build with Quest support
+./gradlew assembleNonRootQuestRelease
+```
+
+### Building without OpenXR
+
+For standard Android builds that don't need Quest support:
+
+```bash
+# Debug build without Quest support
+./gradlew assembleNonRootStandardDebug
+
+# Release build without Quest support
+./gradlew assembleNonRootStandardRelease
+```
 
 ## OpenXR Actions
 
@@ -180,20 +228,28 @@ To test the Quest 3 controller support:
 
 ## Troubleshooting
 
+### "Quest controller support not available in this build"
+- You're using a `standard` build variant
+- Solution: Use a `quest` build variant (e.g., `nonRootQuestDebug`)
+- Or build with: `./gradlew assembleNonRootQuestDebug`
+
 ### Controller Not Detected
 - Ensure you're running on a Meta Quest 3 device
 - Check that controllers are paired and powered on
 - Verify OpenXR runtime is available
+- Ensure you're using a Quest build variant
 
 ### Initialization Failure
 - Check logcat for OpenXR error codes
 - Ensure the app has necessary permissions
 - Verify the OpenXR loader dependency is correctly included
+- Check that `libmoonlight-openxr.so` is present in the APK
 
 ### Input Not Working
 - Confirm the controller validation passes
 - Check that action bindings are correctly suggested
 - Verify the session is in the FOCUSED state
+- Ensure you're using gamepad mode (check preferences)
 
 ## References
 
