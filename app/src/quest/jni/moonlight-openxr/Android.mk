@@ -2,8 +2,14 @@
 # This module is only built for the Quest flavor
 LOCAL_PATH := $(call my-dir)
 
+$(info [Moonlight Quest] Processing Quest OpenXR Android.mk)
+$(info [Moonlight Quest] LOCAL_PATH = $(LOCAL_PATH))
+$(info [Moonlight Quest] HAS_OPENXR = $(HAS_OPENXR))
+
 # Only build this module if HAS_OPENXR is defined (Quest builds)
 ifeq ($(HAS_OPENXR),1)
+
+$(info [Moonlight Quest] Building libmoonlight-openxr.so)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE    := moonlight-openxr

@@ -2,7 +2,16 @@
 include $(call all-subdir-makefiles)
 
 # For Quest builds, also include the Quest-specific OpenXR module
-# Use -include to silently skip if file doesn't exist (for non-Quest source trees)
-QUEST_OPENXR_MK := $(LOCAL_PATH)/../../quest/jni/moonlight-openxr/Android.mk
--include $(QUEST_OPENXR_MK)
+# This must be done AFTER all-subdir-makefiles to avoid conflicts
+MY_LOCAL_PATH := $(call my-dir)
+QUEST_OPENXR_MK := $(MY_LOCAL_PATH)/../../quest/jni/moonlight-openxr/Android.mk
+
+# Only include if the file exists (Quest source tree)
+ifneq ($(wildcard $(QUEST_OPENXR_MK)),)
+    $(info [Moonlight] Including Quest OpenXR module: $(QUEST_OPENXR_MK))
+    $(info [Moonlight] HAS_OPENXR = $(HAS_OPENXR))
+    include $(QUEST_OPENXR_MK)
+else
+    $(info [Moonlight] Quest OpenXR module not found, skipping)
+endif
 
