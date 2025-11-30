@@ -18,9 +18,10 @@ LOCAL_MODULE    := moonlight-openxr
 LOCAL_SRC_FILES := ../../../main/jni/moonlight-core/openxr_input.c \
                    ../../../main/jni/moonlight-core/openxr_jni.c
 
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../../main/jni/moonlight-core
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../../main/jni/moonlight-openxr/include \
+                    $(LOCAL_PATH)/../../../main/jni/moonlight-core
 
-LOCAL_CFLAGS := -DHAS_OPENXR=1
+LOCAL_CFLAGS := -DHAS_OPENXR=1 -DXR_USE_PLATFORM_ANDROID
 
 LOCAL_LDLIBS := -llog -landroid -lopenxr_loader
 
