@@ -1,0 +1,36 @@
+# Android.mk for Quest OpenXR support
+# This module is only built when HAS_OPENXR=1 is passed to ndk-build
+LOCAL_PATH := $(call my-dir)
+
+# Debug output
+$(info ========================================)
+$(info [Quest OpenXR] Processing Android.mk)
+$(info [Quest OpenXR] LOCAL_PATH = $(LOCAL_PATH))
+$(info [Quest OpenXR] HAS_OPENXR = $(HAS_OPENXR))
+$(info ========================================)
+
+# Only build this module if HAS_OPENXR=1
+ifeq ($(HAS_OPENXR),1)
+
+$(info [Quest OpenXR] ✓ Building libmoonlight-openxr.so)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE    := moonlight-openxr
+
+# OpenXR source files (relative to this Android.mk location)
+LOCAL_SRC_FILES := ../moonlight-core/openxr_input.c \
+                   ../moonlight-core/openxr_jni.c
+
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../moonlight-core
+
+LOCAL_CFLAGS := -DHAS_OPENXR=1
+
+LOCAL_LDLIBS := -llog -landroid -lopenxr_loader
+
+include $(BUILD_SHARED_LIBRARY)
+
+else
+
+$(info [Quest OpenXR] ✗ Skipping build - HAS_OPENXR not set to 1)
+
+endif # HAS_OPENXR
