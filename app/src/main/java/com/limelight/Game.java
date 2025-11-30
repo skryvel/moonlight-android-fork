@@ -9,6 +9,7 @@ import com.limelight.binding.input.capture.InputCaptureManager;
 import com.limelight.binding.input.capture.InputCaptureProvider;
 import com.limelight.binding.input.touch.AbsoluteTouchContext;
 import com.limelight.binding.input.touch.RelativeTouchContext;
+import com.limelight.binding.input.driver.QuestController;
 import com.limelight.binding.input.driver.UsbDriverService;
 import com.limelight.binding.input.evdev.EvdevListener;
 import com.limelight.binding.input.touch.TouchContext;
@@ -487,6 +488,22 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 httpsPort, uniqueId, config,
                 PlatformBinding.getCryptoProvider(this), serverCert);
         controllerHandler = new ControllerHandler(this, conn, this, prefConfig);
+
+        // Initialize Quest controllers if this is a Quest build
+        if (BuildConfig.HAS_OPENXR) {
+            try {
+                QuestController questController = QuestController.create(
+                    getApplicationContext(),
+                    1000, // Use a high device ID to avoid conflicts
+                    controllerHandler
+                );
+                LimeLog.info("Quest controller initialized successfully");
+            } catch (Exception e) {
+                LimeLog.warning("Failed to initialize Quest controller: " + e.getMessage());
+                // Continue without Quest controller support
+            }
+        }
+
         keyboardTranslator = new KeyboardTranslator();
 
         InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
@@ -1028,6 +1045,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     protected void onDestroy() {
         super.onDestroy();
+
+        // Cleanup Quest controller if it was initialized
+        if (BuildConfig.HAS_OPENXR) {
+            QuestController.cleanup();
+        }
 
         if (controllerHandler != null) {
             controllerHandler.destroy();
