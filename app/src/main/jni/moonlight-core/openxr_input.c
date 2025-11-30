@@ -47,6 +47,32 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
 
     XrResult result;
 
+    // Get JavaVM from JNIEnv
+    JavaVM* vm;
+    (*env)->GetJavaVM(env, &vm);
+
+    // Initialize OpenXR loader for Android
+    // This MUST be called before xrCreateInstance on Android
+    PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR;
+    result = xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR",
+                                   (PFN_xrVoidFunction*)&xrInitializeLoaderKHR);
+    if (XR_SUCCEEDED(result)) {
+        XrLoaderInitInfoAndroidKHR loaderInitInfo = {
+            .type = XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR,
+            .next = NULL,
+            .applicationVM = vm,
+            .applicationContext = context,
+        };
+        result = xrInitializeLoaderKHR((XrLoaderInitInfoBaseHeaderKHR*)&loaderInitInfo);
+        if (XR_FAILED(result)) {
+            LOGE("Failed to initialize OpenXR loader: %d", result);
+            return false;
+        }
+        LOGI("OpenXR loader initialized successfully");
+    } else {
+        LOGW("xrInitializeLoaderKHR not available, continuing anyway");
+    }
+
     // Create OpenXR instance
     const char* extensions[] = {
         XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
@@ -55,14 +81,9 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
     XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid = {
         .type = XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR,
         .next = NULL,
-        .applicationVM = NULL,  // Will be set from JNI
+        .applicationVM = vm,
         .applicationActivity = context,
     };
-
-    // Get JavaVM from JNIEnv
-    JavaVM* vm;
-    (*env)->GetJavaVM(env, &vm);
-    instanceCreateInfoAndroid.applicationVM = vm;
 
     XrInstanceCreateInfo instanceCreateInfo = {
         .type = XR_TYPE_INSTANCE_CREATE_INFO,
