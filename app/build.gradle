@@ -48,7 +48,7 @@ android {
 
             externalNativeBuild {
                 ndkBuild {
-                    arguments "PRODUCT_FLAVOR=root"
+                    arguments "PRODUCT_FLAVOR=root", "HAS_OPENXR=1"
                 }
             }
 
@@ -73,10 +73,10 @@ android {
 
         nonRootQuest {
             minSdk 24
-            
+
             externalNativeBuild {
                 ndkBuild {
-                    arguments "PRODUCT_FLAVOR=nonRoot"
+                    arguments "PRODUCT_FLAVOR=nonRoot", "HAS_OPENXR=1"
                 }
             }
 

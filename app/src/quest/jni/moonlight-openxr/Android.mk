@@ -2,6 +2,9 @@
 # This module is only built for the Quest flavor
 LOCAL_PATH := $(call my-dir)
 
+# Only build this module if HAS_OPENXR is defined (Quest builds)
+ifeq ($(HAS_OPENXR),1)
+
 include $(CLEAR_VARS)
 LOCAL_MODULE    := moonlight-openxr
 
@@ -16,3 +19,6 @@ LOCAL_CFLAGS := -DHAS_OPENXR=1
 LOCAL_LDLIBS := -llog -landroid -lopenxr_loader
 
 include $(BUILD_SHARED_LIBRARY)
+
+endif # HAS_OPENXR
+

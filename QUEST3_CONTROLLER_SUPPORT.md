@@ -253,11 +253,55 @@ To test the Quest 3 controller support:
    adb logcat | grep -E "OpenXR|QuestController"
    ```
 
+## Native Build Configuration
+
+The Quest OpenXR native library (`libmoonlight-openxr.so`) is built conditionally:
+
+### Build System Setup
+
+1. **NDK Arguments**: Quest flavors pass `HAS_OPENXR=1` to ndk-build
+   ```gradle
+   nonRootQuest {
+       externalNativeBuild {
+           ndkBuild {
+               arguments "PRODUCT_FLAVOR=nonRoot", "HAS_OPENXR=1"
+           }
+       }
+   }
+   ```
+
+2. **Module Inclusion**: The main `Android.mk` includes the Quest module:
+   ```makefile
+   # app/src/main/jni/Android.mk
+   -include $(LOCAL_PATH)/../../quest/jni/moonlight-openxr/Android.mk
+   ```
+
+3. **Conditional Build**: The Quest module only builds when `HAS_OPENXR=1`:
+   ```makefile
+   # app/src/quest/jni/moonlight-openxr/Android.mk
+   ifeq ($(HAS_OPENXR),1)
+       # Build module
+   endif
+   ```
+
+### File Locations
+
+- **Source Files**: `app/src/main/jni/moonlight-core/openxr_input.c`, `openxr_jni.c`
+- **Headers**: `app/src/main/jni/moonlight-core/openxr_input.h`
+- **Build Script**: `app/src/quest/jni/moonlight-openxr/Android.mk`
+- **Output**: `lib/<arch>/libmoonlight-openxr.so` (only in Quest APKs)
+
 ## Troubleshooting
+
+### "Failed to load OpenXR library: library 'libmoonlight-openxr.so' not found"
+- The native library wasn't built or included in the APK
+- **Solution**: Ensure you're building a Quest variant (e.g., `assembleNonRootQuestDebug`)
+- Check that `HAS_OPENXR=1` is passed to ndk-build in build.gradle
+- Verify the Quest Android.mk is being included during build
 
 ### "Quest controller support not available in this build"
 - You're using a build without OpenXR (e.g., `nonRootDebug`)
-- Solution: Use a Quest build variant (e.g., `nonRootQuestDebug`)
+- **Solution**: Use a Quest build variant (e.g., `nonRootQuestDebug`)
 - Or build with: `./gradlew assembleNonRootQuestDebug`
 
 ### Controller Not Detected
