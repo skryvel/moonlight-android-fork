@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    ndkVersion "28.0.12674087"
+    ndkVersion "27.0.12077973"
 
     compileSdk 35
 
@@ -43,6 +43,7 @@ android {
         }
 
         rootQuest {
+            minSdk 24
             maxSdk 25
 
             externalNativeBuild {
@@ -71,6 +72,8 @@ android {
         }
 
         nonRootQuest {
+            minSdk 24
+            
             externalNativeBuild {
                 ndkBuild {
                     arguments "PRODUCT_FLAVOR=nonRoot"
@@ -86,8 +89,8 @@ android {
 
     compileOptions {
         encoding "UTF-8"
-        sourceCompatibility JavaVersion.VERSION_25
-        targetCompatibility JavaVersion.VERSION_25
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     lint {
@@ -106,6 +109,12 @@ android {
             // weird crashes due to missing drawable resources
             // when this split is enabled.
             enableSplit = false
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
         }
     }
 
