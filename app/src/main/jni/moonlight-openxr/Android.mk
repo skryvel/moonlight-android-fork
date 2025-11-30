@@ -14,6 +14,14 @@ ifeq ($(HAS_OPENXR),1)
 
 $(info [Quest OpenXR] ✓ Building libmoonlight-openxr.so)
 
+# Prebuilt OpenXR loader library (from AAR dependency)
+include $(CLEAR_VARS)
+LOCAL_MODULE := openxr_loader
+LOCAL_SRC_FILES := $(TARGET_ARCH_ABI)/libopenxr_loader.so
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/include
+include $(PREBUILT_SHARED_LIBRARY)
+
+# Our OpenXR wrapper module
 include $(CLEAR_VARS)
 LOCAL_MODULE    := moonlight-openxr
 
@@ -27,7 +35,10 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/include \
 
 LOCAL_CFLAGS := -DHAS_OPENXR=1 -DXR_USE_PLATFORM_ANDROID
 
-LOCAL_LDLIBS := -llog -landroid -lopenxr_loader
+LOCAL_LDLIBS := -llog -landroid
+
+# Link against the prebuilt OpenXR loader
+LOCAL_SHARED_LIBRARIES := openxr_loader
 
 include $(BUILD_SHARED_LIBRARY)
 
