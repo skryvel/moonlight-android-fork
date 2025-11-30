@@ -21,7 +21,9 @@ LOCAL_MODULE    := moonlight-openxr
 LOCAL_SRC_FILES := ../moonlight-core/openxr_input.c \
                    ../moonlight-core/openxr_jni.c
 
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/../moonlight-core
+# Include paths for OpenXR headers and moonlight-core
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include \
+                    $(LOCAL_PATH)/../moonlight-core
 
 LOCAL_CFLAGS := -DHAS_OPENXR=1
 
