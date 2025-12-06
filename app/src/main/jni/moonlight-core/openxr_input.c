@@ -1,7 +1,10 @@
 #include "openxr_input.h"
 #include <android/log.h>
+#include <android/native_window.h>
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
+#include <EGL/egl.h>
 
 #define OPENXR_CHECK_LOADER
 #include <openxr/openxr.h>
@@ -18,6 +21,13 @@ static XrSession g_session = XR_NULL_HANDLE;
 static XrActionSet g_actionSet = XR_NULL_HANDLE;
 static XrSpace g_appSpace = XR_NULL_HANDLE;
 static bool g_initialized = false;
+static XrSessionState g_sessionState = XR_SESSION_STATE_UNKNOWN;
+static bool g_sessionRunning = false;
+
+// EGL state for graphics binding (required by Quest OpenXR)
+static EGLDisplay g_eglDisplay = EGL_NO_DISPLAY;
+static EGLContext g_eglContext = EGL_NO_CONTEXT;
+static EGLConfig g_eglConfig = NULL;
 
 // Actions for controller input
 static XrAction g_action_a = XR_NULL_HANDLE;
@@ -40,6 +50,181 @@ static XrPath g_hand_right_path = XR_NULL_PATH;
 static XrSpace g_hand_left_space = XR_NULL_HANDLE;
 static XrSpace g_hand_right_space = XR_NULL_HANDLE;
 
+// Forward declarations
+static bool init_egl(void);
+static void cleanup_egl(void);
+static bool poll_events(void);
+static bool wait_for_session_ready(void);
+
+// Initialize minimal EGL context for OpenXR graphics binding
+static bool init_egl(void) {
+    g_eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (g_eglDisplay == EGL_NO_DISPLAY) {
+        LOGE("Failed to get EGL display");
+        return false;
+    }
+
+    EGLint major, minor;
+    if (!eglInitialize(g_eglDisplay, &major, &minor)) {
+        LOGE("Failed to initialize EGL");
+        return false;
+    }
+    LOGI("EGL initialized: %d.%d", major, minor);
+
+    // Choose config
+    EGLint configAttribs[] = {
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_DEPTH_SIZE, 0,
+        EGL_STENCIL_SIZE, 0,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+        EGL_NONE
+    };
+
+    EGLint numConfigs;
+    if (!eglChooseConfig(g_eglDisplay, configAttribs, &g_eglConfig, 1, &numConfigs) || numConfigs == 0) {
+        LOGE("Failed to choose EGL config");
+        return false;
+    }
+
+    // Create context
+    EGLint contextAttribs[] = {
+        EGL_CONTEXT_MAJOR_VERSION, 3,
+        EGL_CONTEXT_MINOR_VERSION, 0,
+        EGL_NONE
+    };
+
+    g_eglContext = eglCreateContext(g_eglDisplay, g_eglConfig, EGL_NO_CONTEXT, contextAttribs);
+    if (g_eglContext == EGL_NO_CONTEXT) {
+        LOGE("Failed to create EGL context");
+        return false;
+    }
+
+    // Make context current with no surface (surfaceless context)
+    if (!eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, g_eglContext)) {
+        LOGE("Failed to make EGL context current (surfaceless)");
+        // Some implementations don't support surfaceless - create a 1x1 pbuffer
+        EGLint pbufferAttribs[] = {
+            EGL_WIDTH, 1,
+            EGL_HEIGHT, 1,
+            EGL_NONE
+        };
+        EGLSurface pbuffer = eglCreatePbufferSurface(g_eglDisplay, g_eglConfig, pbufferAttribs);
+        if (pbuffer == EGL_NO_SURFACE) {
+            LOGE("Failed to create pbuffer surface");
+            return false;
+        }
+        if (!eglMakeCurrent(g_eglDisplay, pbuffer, pbuffer, g_eglContext)) {
+            LOGE("Failed to make EGL context current with pbuffer");
+            return false;
+        }
+    }
+
+    LOGI("EGL context created successfully");
+    return true;
+}
+
+static void cleanup_egl(void) {
+    if (g_eglDisplay != EGL_NO_DISPLAY) {
+        eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (g_eglContext != EGL_NO_CONTEXT) {
+            eglDestroyContext(g_eglDisplay, g_eglContext);
+            g_eglContext = EGL_NO_CONTEXT;
+        }
+        eglTerminate(g_eglDisplay);
+        g_eglDisplay = EGL_NO_DISPLAY;
+    }
+}
+
+// Poll OpenXR events and handle session state changes
+static bool poll_events(void) {
+    XrEventDataBuffer eventData = {.type = XR_TYPE_EVENT_DATA_BUFFER};
+
+    while (xrPollEvent(g_instance, &eventData) == XR_SUCCESS) {
+        switch (eventData.type) {
+            case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
+                XrEventDataSessionStateChanged* stateChanged = (XrEventDataSessionStateChanged*)&eventData;
+                g_sessionState = stateChanged->state;
+                LOGI("Session state changed to: %d", g_sessionState);
+
+                switch (g_sessionState) {
+                    case XR_SESSION_STATE_READY: {
+                        // Begin the session
+                        XrSessionBeginInfo beginInfo = {
+                            .type = XR_TYPE_SESSION_BEGIN_INFO,
+                            .next = NULL,
+                            .primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+                        };
+                        XrResult result = xrBeginSession(g_session, &beginInfo);
+                        if (XR_SUCCEEDED(result)) {
+                            g_sessionRunning = true;
+                            LOGI("Session started successfully");
+                        } else {
+                            LOGE("Failed to begin session: %d", result);
+                        }
+                        break;
+                    }
+                    case XR_SESSION_STATE_STOPPING:
+                        if (g_sessionRunning) {
+                            xrEndSession(g_session);
+                            g_sessionRunning = false;
+                            LOGI("Session ended");
+                        }
+                        break;
+                    case XR_SESSION_STATE_EXITING:
+                    case XR_SESSION_STATE_LOSS_PENDING:
+                        g_sessionRunning = false;
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            }
+            case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
+                LOGW("Instance loss pending");
+                return false;
+            default:
+                break;
+        }
+        eventData.type = XR_TYPE_EVENT_DATA_BUFFER;
+    }
+    return true;
+}
+
+// Wait for session to become ready (with timeout)
+static bool wait_for_session_ready(void) {
+    int attempts = 0;
+    const int maxAttempts = 100; // 10 seconds timeout (100 * 100ms)
+
+    while (attempts < maxAttempts) {
+        poll_events();
+
+        if (g_sessionState == XR_SESSION_STATE_FOCUSED ||
+            g_sessionState == XR_SESSION_STATE_VISIBLE ||
+            g_sessionState == XR_SESSION_STATE_SYNCHRONIZED) {
+            LOGI("Session is ready for input (state: %d)", g_sessionState);
+            return true;
+        }
+
+        if (g_sessionState == XR_SESSION_STATE_EXITING ||
+            g_sessionState == XR_SESSION_STATE_LOSS_PENDING) {
+            LOGE("Session entering exit state");
+            return false;
+        }
+
+        // Wait a bit before polling again
+        struct timespec ts = {0, 100000000}; // 100ms
+        nanosleep(&ts, NULL);
+        attempts++;
+    }
+
+    LOGW("Timeout waiting for session to be ready (current state: %d)", g_sessionState);
+    // Return true anyway - we might still be able to get input
+    return g_sessionRunning;
+}
+
 bool openxr_input_init(JNIEnv* env, jobject context) {
     if (g_initialized) {
         LOGI("OpenXR already initialized");
@@ -47,6 +232,12 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
     }
 
     XrResult result;
+
+    // Initialize EGL first (required for OpenXR graphics binding on Quest)
+    if (!init_egl()) {
+        LOGE("Failed to initialize EGL");
+        return false;
+    }
 
     // Get JavaVM from JNIEnv
     JavaVM* vm;
@@ -67,6 +258,7 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
         result = xrInitializeLoaderKHR((XrLoaderInitInfoBaseHeaderKHR*)&loaderInitInfo);
         if (XR_FAILED(result)) {
             LOGE("Failed to initialize OpenXR loader: %d", result);
+            cleanup_egl();
             return false;
         }
         LOGI("OpenXR loader initialized successfully");
@@ -74,9 +266,10 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
         LOGW("xrInitializeLoaderKHR not available, continuing anyway");
     }
 
-    // Create OpenXR instance
+    // Create OpenXR instance with required extensions
     const char* extensions[] = {
         XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
+        XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
     };
 
     XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid = {
@@ -99,13 +292,14 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
         },
         .enabledApiLayerCount = 0,
         .enabledApiLayerNames = NULL,
-        .enabledExtensionCount = 1,
+        .enabledExtensionCount = 2,
         .enabledExtensionNames = extensions,
     };
 
     result = xrCreateInstance(&instanceCreateInfo, &g_instance);
     if (XR_FAILED(result)) {
         LOGE("Failed to create XR instance: %d", result);
+        cleanup_egl();
         return false;
     }
 
@@ -124,14 +318,43 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
         LOGE("Failed to get XR system: %d", result);
         xrDestroyInstance(g_instance);
         g_instance = XR_NULL_HANDLE;
+        cleanup_egl();
         return false;
     }
 
-    // Create session
-    // Note: This is simplified. In a real app, you'd need to set up graphics bindings
+    // Check graphics requirements (required before session creation)
+    PFN_xrGetOpenGLESGraphicsRequirementsKHR xrGetOpenGLESGraphicsRequirementsKHR;
+    result = xrGetInstanceProcAddr(g_instance, "xrGetOpenGLESGraphicsRequirementsKHR",
+                                   (PFN_xrVoidFunction*)&xrGetOpenGLESGraphicsRequirementsKHR);
+    if (XR_SUCCEEDED(result)) {
+        XrGraphicsRequirementsOpenGLESKHR graphicsRequirements = {
+            .type = XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR,
+            .next = NULL,
+        };
+        result = xrGetOpenGLESGraphicsRequirementsKHR(g_instance, systemId, &graphicsRequirements);
+        if (XR_FAILED(result)) {
+            LOGW("Failed to get OpenGL ES graphics requirements: %d", result);
+        } else {
+            LOGI("OpenGL ES version required: %d.%d - %d.%d",
+                 XR_VERSION_MAJOR(graphicsRequirements.minApiVersionSupported),
+                 XR_VERSION_MINOR(graphicsRequirements.minApiVersionSupported),
+                 XR_VERSION_MAJOR(graphicsRequirements.maxApiVersionSupported),
+                 XR_VERSION_MINOR(graphicsRequirements.maxApiVersionSupported));
+        }
+    }
+
+    // Create session with OpenGL ES graphics binding
+    XrGraphicsBindingOpenGLESAndroidKHR graphicsBinding = {
+        .type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
+        .next = NULL,
+        .display = g_eglDisplay,
+        .config = g_eglConfig,
+        .context = g_eglContext,
+    };
+
     XrSessionCreateInfo sessionCreateInfo = {
         .type = XR_TYPE_SESSION_CREATE_INFO,
-        .next = NULL,
+        .next = &graphicsBinding,
         .createFlags = 0,
         .systemId = systemId,
     };
@@ -141,8 +364,11 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
         LOGE("Failed to create XR session: %d", result);
         xrDestroyInstance(g_instance);
         g_instance = XR_NULL_HANDLE;
+        cleanup_egl();
         return false;
     }
+
+    LOGI("OpenXR session created successfully");
 
     // Create reference space
     XrReferenceSpaceCreateInfo refSpaceCreateInfo = {
@@ -219,13 +445,12 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
     strcpy(actionInfo.localizedActionName, "Menu Button");
     xrCreateAction(g_actionSet, &actionInfo, &g_action_menu);
 
-    // Grip buttons (both hands)
-    actionInfo.countSubactionPaths = 2;
-    actionInfo.subactionPaths = handPaths;
-    strcpy(actionInfo.actionName, "grip_left");
-    strcpy(actionInfo.localizedActionName, "Left Grip");
+    // Grip buttons (both hands) - Note: Quest squeeze is analog, so we use FLOAT
+    actionInfo.actionType = XR_ACTION_TYPE_FLOAT_INPUT;
     actionInfo.countSubactionPaths = 1;
     actionInfo.subactionPaths = &g_hand_left_path;
+    strcpy(actionInfo.actionName, "grip_left");
+    strcpy(actionInfo.localizedActionName, "Left Grip");
     xrCreateAction(g_actionSet, &actionInfo, &g_action_grip_left);
 
     strcpy(actionInfo.actionName, "grip_right");
@@ -233,7 +458,7 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
     actionInfo.subactionPaths = &g_hand_right_path;
     xrCreateAction(g_actionSet, &actionInfo, &g_action_grip_right);
 
-    // Triggers (analog)
+    // Triggers (analog) - already FLOAT from above
     actionInfo.actionType = XR_ACTION_TYPE_FLOAT_INPUT;
     actionInfo.subactionPaths = &g_hand_left_path;
     strcpy(actionInfo.actionName, "trigger_left");
@@ -336,12 +561,31 @@ bool openxr_input_init(JNIEnv* env, jobject context) {
 
     g_initialized = true;
     LOGI("OpenXR input initialized successfully");
+
+    // Wait for session to be ready for input
+    if (!wait_for_session_ready()) {
+        LOGW("Session may not be fully ready, but continuing anyway");
+    }
+
     return true;
 }
 
 bool openxr_input_poll(QuestControllerState* state) {
     if (!g_initialized || !state) {
         return false;
+    }
+
+    // Process any pending events (handles session state changes)
+    if (!poll_events()) {
+        LOGW("Error polling events or instance loss");
+        return false;
+    }
+
+    // Check if session is in a state where we can read input
+    if (!g_sessionRunning) {
+        // Session not running yet - return empty state but don't fail
+        memset(state, 0, sizeof(QuestControllerState));
+        return true;
     }
 
     memset(state, 0, sizeof(QuestControllerState));
@@ -395,13 +639,15 @@ bool openxr_input_poll(QuestControllerState* state) {
     xrGetActionStateBoolean(g_session, &getInfo, &boolState);
     state->button_menu = boolState.currentState;
 
+    // Grip actions are FLOAT - convert to boolean with threshold
+    XrActionStateFloat gripFloatState = {.type = XR_TYPE_ACTION_STATE_FLOAT};
     getInfo.action = g_action_grip_left;
-    xrGetActionStateBoolean(g_session, &getInfo, &boolState);
-    state->button_lb = boolState.currentState;
+    xrGetActionStateFloat(g_session, &getInfo, &gripFloatState);
+    state->button_lb = gripFloatState.currentState > 0.5f;
 
     getInfo.action = g_action_grip_right;
-    xrGetActionStateBoolean(g_session, &getInfo, &boolState);
-    state->button_rb = boolState.currentState;
+    xrGetActionStateFloat(g_session, &getInfo, &gripFloatState);
+    state->button_rb = gripFloatState.currentState > 0.5f;
 
     getInfo.action = g_action_thumbstick_click_left;
     xrGetActionStateBoolean(g_session, &getInfo, &boolState);
@@ -440,6 +686,12 @@ bool openxr_input_poll(QuestControllerState* state) {
 }
 
 void openxr_input_cleanup() {
+    // End the session if it's running
+    if (g_sessionRunning && g_session != XR_NULL_HANDLE) {
+        xrEndSession(g_session);
+        g_sessionRunning = false;
+    }
+
     if (g_appSpace != XR_NULL_HANDLE) {
         xrDestroySpace(g_appSpace);
         g_appSpace = XR_NULL_HANDLE;
@@ -460,7 +712,11 @@ void openxr_input_cleanup() {
         g_instance = XR_NULL_HANDLE;
     }
 
+    // Cleanup EGL resources
+    cleanup_egl();
+
     g_initialized = false;
+    g_sessionState = XR_SESSION_STATE_UNKNOWN;
     LOGI("OpenXR input cleaned up");
 }
 

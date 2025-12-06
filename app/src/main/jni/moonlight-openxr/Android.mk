@@ -33,9 +33,9 @@ LOCAL_SRC_FILES := ../moonlight-core/openxr_input.c \
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include \
                     $(LOCAL_PATH)/../moonlight-core
 
-LOCAL_CFLAGS := -DHAS_OPENXR=1 -DXR_USE_PLATFORM_ANDROID
+LOCAL_CFLAGS := -DHAS_OPENXR=1 -DXR_USE_PLATFORM_ANDROID -DXR_USE_GRAPHICS_API_OPENGL_ES
 
-LOCAL_LDLIBS := -llog -landroid
+LOCAL_LDLIBS := -llog -landroid -lEGL -lGLESv3
 
 # Link against the prebuilt OpenXR loader
 LOCAL_SHARED_LIBRARIES := openxr_loader
